@@ -8,15 +8,18 @@ from sklearn.metrics import mean_squared_error
 import joblib
 
 # -------------------------------------------
-# Cargar dataset fuente
+#  Cargar dataset fuente
 # -------------------------------------------
 df = pd.read_csv("reseñas_con_atractivos_turisticos.csv", sep="|")
 
 # Detectar columnas de actividades
 col_act = [c for c in df.columns if c.lower().startswith("calif promedio")]
 
+# -------------------------------------------
 # Crear catálogo de destinos agregados
+# -------------------------------------------
 group_cols = ['nombre', 'provincia', 'canton', 'parroquia', 'lat', 'lon', 'desc_']
+
 agg_dict = {c: 'mean' for c in col_act}
 agg_dict.update({
     'provincia': 'first',
@@ -31,7 +34,15 @@ destinos = df.groupby('nombre').agg(agg_dict).reset_index()
 destinos = destinos.rename(columns={'desc_': 'descripcion'})
 
 # -------------------------------------------
-# Función para generar datos sintéticos (3000)
+# Función para generar datos sintéticos
+'''
+Crea un dataset sintético que simula:
+
+Preferencias de familias
+Duración del viaje
+Destino elegido
+Un puntaje (score) que indica qué tan adecuado es el destino
+'''
 # -------------------------------------------
 def generar_datos_sint(dest_df, n_examples=3000, seed=42):
     rng = np.random.RandomState(seed)
@@ -39,19 +50,22 @@ def generar_datos_sint(dest_df, n_examples=3000, seed=42):
     destinos_ids = dest_df["nombre"].values
 
     for i in range(n_examples):
-        # Preferencias sintéticas (0-5)
+
+        # Preferencias de turismo (0-5)
         prefs = {
             f"pref_{c.replace('Calif promedio ', '')}":
                 float(np.round(rng.beta(2, 2) * 5, 2))
             for c in col_act
         }
 
+        # Duración en días del viaje
         duracion = int(rng.randint(1, 15))
 
-        # Escoger destino al azar
+        # Destino escogido al azar
         destino_name = rng.choice(destinos_ids)
         dest_row = dest_df[dest_df["nombre"] == destino_name].iloc[0]
 
+        # Vectores para cálculo de score
         dest_acts = np.array([dest_row[c] for c in col_act], dtype=float)
         pref_vals = np.array(
             [prefs[f"pref_{c.replace('Calif promedio ', '')}"] for c in col_act],
@@ -73,7 +87,11 @@ def generar_datos_sint(dest_df, n_examples=3000, seed=42):
     return pd.DataFrame(rows)
 
 # -------------------------------------------
-# 3. Generar 3000 ejemplos sintéticos
+# 4. Generar 3000 ejemplos 
 # -------------------------------------------
 ejemplos_entrena = generar_datos_sint(destinos, n_examples=3000)
-print("Ejemplos generados:", len(ejemplos_entrena))
+
+# -------------------------------------------
+# Guardar dataset
+# -------------------------------------------
+ejemplos_entrena.to_csv("datos_sinteticos.csv", index=False, sep="|")
