@@ -1,97 +1,160 @@
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import OneHotEncoder
-from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
-from sklearn.metrics import mean_squared_error
-import joblib
+import random
 
-# -------------------------------------------
-#  Cargar dataset fuente
-# -------------------------------------------
+from sklearn.model_selection import train_test_split
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import Pipeline
+
+from category_encoders import TargetEncoder
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+
+from xgboost import XGBRegressor
+
+# =======================================================
+# Cargar Dataset
+# =======================================================
 df = pd.read_csv("reseñas_con_atractivos_turisticos.csv", sep="|")
 
-# Detectar columnas de actividades
-col_act = [c for c in df.columns if c.lower().startswith("calif promedio")]
+# =======================================================
+# columnas
+# =======================================================
+num_cols = [c for c in df.columns if "Calif promedio" in c]
+cat_cols = ["provincia", "canton", "parroquia"]
 
-# -------------------------------------------
-# Crear catálogo de destinos agregados
-# -------------------------------------------
-group_cols = ['nombre', 'provincia', 'canton', 'parroquia', 'lat', 'lon', 'desc_']
+# =======================================================
+# eliminar columnas NO deseadas
+# =======================================================
+df = df.drop(columns=[
+    "ID unico de usuario",
+    "user_id",
+    "desc_",
+    "desc2",
+    "desc3"
+], errors="ignore")
 
-agg_dict = {c: 'mean' for c in col_act}
-agg_dict.update({
-    'provincia': 'first',
-    'canton': 'first',
-    'parroquia': 'first',
-    'lat': 'median',
-    'lon': 'median',
-    'desc_': 'first'
-})
+# =======================================================
+# Crear SCORE
+# =======================================================
+df["score"] = df[num_cols].mean(axis=1)
+target = "score"
 
-destinos = df.groupby('nombre').agg(agg_dict).reset_index()
-destinos = destinos.rename(columns={'desc_': 'descripcion'})
+# =======================================================
+# Eliminar filas vacías
+# =======================================================
+df = df.dropna(subset=num_cols + cat_cols)
 
-# -------------------------------------------
-# Función para generar datos sintéticos
-'''
-Crea un dataset sintético que simula:
+# =======================================================
+# Generar Datos Sintéticos
+# =======================================================
 
-Preferencias de familias
-Duración del viaje
-Destino elegido
-Un puntaje (score) que indica qué tan adecuado es el destino
-'''
-# -------------------------------------------
-def generar_datos_sint(dest_df, n_examples=3000, seed=42):
-    rng = np.random.RandomState(seed)
-    rows = []
-    destinos_ids = dest_df["nombre"].values
+N = 3000
+sintetico = pd.DataFrame()
 
-    for i in range(n_examples):
+# ---------- Simulación multivariada ----------
+cov_matrix = np.cov(df[num_cols].values.T)
+mean_vector = df[num_cols].mean().values
 
-        # Preferencias de turismo (0-5)
-        prefs = {
-            f"pref_{c.replace('Calif promedio ', '')}":
-                float(np.round(rng.beta(2, 2) * 5, 2))
-            for c in col_act
-        }
+vals = np.random.multivariate_normal(
+    mean=mean_vector,
+    cov=cov_matrix * 0.4,
+    size=N
+)
 
-        # Duración en días del viaje
-        duracion = int(rng.randint(1, 15))
+for i, col in enumerate(num_cols):
+    sintetico[col] = np.clip(vals[:, i], 0, 5)
 
-        # Destino escogido al azar
-        destino_name = rng.choice(destinos_ids)
-        dest_row = dest_df[dest_df["nombre"] == destino_name].iloc[0]
+# ---------- Categóricas realistas ----------
+pc_map = df.groupby("provincia")["canton"].unique().to_dict()
+cp_map = df.groupby("canton")["parroquia"].unique().to_dict()
+provincias = df["provincia"].unique()
 
-        # Vectores para cálculo de score
-        dest_acts = np.array([dest_row[c] for c in col_act], dtype=float)
-        pref_vals = np.array(
-            [prefs[f"pref_{c.replace('Calif promedio ', '')}"] for c in col_act],
-            dtype=float
-        )
+def generar_registro_categ():
+    prov = np.random.choice(provincias)
+    canton = np.random.choice(pc_map[prov])
+    parroquia = np.random.choice(cp_map[canton])
+    return prov, canton, parroquia
 
-        # Score sintético basado en similitud
-        dist = np.linalg.norm(dest_acts - pref_vals)
-        sim = 5 - (dist / np.sqrt(len(col_act)))
-        score = sim + rng.normal(0, 0.2)
+cats = [generar_registro_categ() for _ in range(N)]
+cats = pd.DataFrame(cats, columns=cat_cols)
+sintetico[cat_cols] = cats
 
-        rows.append({
-            **prefs,
-            "duracion_deseada": duracion,
-            "destino": destino_name,
-            "score": float(score)
-        })
+# ---------- Score sintético ----------
+sintetico["score"] = sintetico[num_cols].mean(axis=1)
 
-    return pd.DataFrame(rows)
+# =======================================================
+# Unir datos
+# =======================================================
+df_final = pd.concat([df, sintetico], ignore_index=True)
 
-# -------------------------------------------
-# 4. Generar 3000 ejemplos 
-# -------------------------------------------
-ejemplos_entrena = generar_datos_sint(destinos, n_examples=3000)
+print(f"Datos sintéticos generados: {len(sintetico)} filas")
+print(f"Dataset final para entrenamiento: {len(df_final)} filas")
 
-# -------------------------------------------
-# Guardar dataset
-# -------------------------------------------
-ejemplos_entrena.to_csv("datos_sinteticos.csv", index=False, sep="|")
+df_final.to_csv("datos_sintetico.csv", sep="|", index=False)
+print("Dataset combinado guardado")
+
+# =======================================================
+# Definir X e y
+# =======================================================
+X = df_final[num_cols + cat_cols]
+y = df_final[target]
+
+# =======================================================
+# Preprocesamiento
+# =======================================================
+preprocess = ColumnTransformer(
+    transformers=[
+        ("num", StandardScaler(), num_cols),
+        ("cat", TargetEncoder(), cat_cols),
+    ],
+    remainder="drop"
+)
+
+# =======================================================
+# Modelo XGBoost
+# =======================================================
+model = XGBRegressor(
+    n_estimators=500,
+    max_depth=9,
+    learning_rate=0.045,
+    subsample=0.9,
+    colsample_bytree=0.85,
+    objective="reg:squarederror",
+    random_state=42,
+    n_jobs=-1
+)
+
+pipeline = Pipeline([
+    ("prep", preprocess),
+    ("xgb", model)
+])
+
+# =======================================================
+# Split y Entrenamiento
+# =======================================================
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42
+)
+
+pipeline.fit(X_train, y_train)
+
+# =======================================================
+# Evaluación
+# =======================================================
+preds = pipeline.predict(X_test)
+
+rmse = np.sqrt(mean_squared_error(y_test, preds))
+mae = mean_absolute_error(y_test, preds)
+r2 = r2_score(y_test, preds)
+
+print("\n=========== MODELO XGBOOST ===========")
+print(f"RMSE:      {rmse:.4f}")
+print(f"MAE:       {mae:.4f}")
+print(f"R2 Score:  {r2:.4f}")
+print("=========================================================\n")
+
+print(pd.DataFrame({
+    "real": y_test.iloc[:10].values,
+    "predicho": preds[:10]
+}))
