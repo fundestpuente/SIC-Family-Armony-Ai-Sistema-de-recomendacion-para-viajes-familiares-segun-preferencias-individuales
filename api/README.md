@@ -19,7 +19,11 @@ SIC-FAMILY-ARMONY-AI/
    git clone <tu-repo-url>
    cd <nombre-del-repo>
 
-2. **Configurar variables de entorno**:
+2. **Instalar dependencias**:
+    ```bash
+    pip install fastapi uvicorn[standard] pandas numpy scikit-learn xgboost python-dotenv python-multipart
+
+3. **Configurar variables de entorno**:
 Crea un archivo .env en SIC-FAMILY-ARMONY-AI/api/
 
 Ejemplo:
@@ -27,6 +31,6 @@ Ejemplo:
     NEW_DATA_PATH=../data/nuevos_viajes.csv -> nuevos datos historicos
     PORT=8000                               -> puerto donde se ejecuta la API
 
-3. **Ejecutar la API**:
+4. **Ejecutar la API**:
     cd api
     uvicorn app.main:app --reload --port 8000
