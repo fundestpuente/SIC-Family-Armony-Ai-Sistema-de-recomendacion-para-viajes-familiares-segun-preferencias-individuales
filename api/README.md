@@ -5,12 +5,11 @@ Backend en **FastAPI** que entrena un modelo **XGBoost** con datos históricos d
 ## 📁 Estructura del Proyecto
 SIC-FAMILY-ARMONY-AI/
 ├── data/
-│   └── datos_sinteticos.csv           # Datos históricos (entrenamiento)
+│   └── datos_sintetico.csv           # Datos históricos (entrenamiento)
 └── api/                               # Backend (FastAPI)
-    ├── app/
-    ├── environment.yml                # Entorno Conda
-    ├── .env                           # Variables de entorno
-    └── .gitignore
+|   ├── app/
+|   ├── .env                           # Variables de entorno
+└── .gitignore
 
 
 ## 🛠️ Configuración del Entorno
@@ -24,9 +23,10 @@ SIC-FAMILY-ARMONY-AI/
 Crea un archivo .env en SIC-FAMILY-ARMONY-AI/api/
 
 Ejemplo:
-    DATA_PATH=../data/viajes_familiares.csv -> datos de entrenamiento
+    DATA_PATH=../data/datos_sintetico.csv -> datos de entrenamiento
     NEW_DATA_PATH=../data/nuevos_viajes.csv -> nuevos datos historicos
     PORT=8000                               -> puerto donde se ejecuta la API
 
 3. **Ejecutar la API**:
-uvicorn app.main:app --reload --port 8000
+    cd api
+    uvicorn app.main:app --reload --port 8000
