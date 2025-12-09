@@ -1,2 +1,25 @@
-.env/
+# Entornos y dependencias
+__pycache__/
+*.pyc
+.env
+env/
 venv/
+.conda/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Logs y datos temporales
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# FastAPI / Uvicorn
+uvicorn.log
