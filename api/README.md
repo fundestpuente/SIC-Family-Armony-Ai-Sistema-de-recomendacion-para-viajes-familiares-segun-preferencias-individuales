@@ -22,8 +22,7 @@ SIC-FAMILY-ARMONY-AI/
 2. **Instalar dependencias**:
     ```bash
     pip install fastapi uvicorn[standard] pandas numpy scikit-learn xgboost python-dotenv python-multipart
-
-    pip install plotly
+    pip install plotly streamlit-folium streamlit
 
 3. **Configurar variables de entorno**:
 Crea un archivo .env en SIC-FAMILY-ARMONY-AI/api/
