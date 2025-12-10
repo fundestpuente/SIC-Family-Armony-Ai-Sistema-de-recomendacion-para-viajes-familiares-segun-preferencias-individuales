@@ -23,6 +23,8 @@ SIC-FAMILY-ARMONY-AI/
     ```bash
     pip install fastapi uvicorn[standard] pandas numpy scikit-learn xgboost python-dotenv python-multipart
 
+    pip install plotly
+
 3. **Configurar variables de entorno**:
 Crea un archivo .env en SIC-FAMILY-ARMONY-AI/api/
 
